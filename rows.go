@@ -87,7 +87,7 @@ func (r *rows) Close() error {
 	}
 	var err error
 	if C.dpiStmt_release(st.dpiStmt) == C.DPI_FAILURE {
-		err = errors.Wrap(r.getError(), "rows/dpiStmt_release")
+		err = r.getError()
 	}
 	return err
 }
@@ -276,7 +276,7 @@ func (r *rows) Next(dest []driver.Value) error {
 	if r.fetched == 0 {
 		var moreRows C.int
 		if C.dpiStmt_fetchRows(r.dpiStmt, C.uint32_t(r.statement.FetchRowCount()), &r.bufferRowIndex, &r.fetched, &moreRows) == C.DPI_FAILURE {
-			return errors.Wrap(r.getError(), "Next")
+			return r.getError()
 		}
 		if Log != nil {
 			Log("msg", "fetched", "bri", r.bufferRowIndex, "fetched", r.fetched, "moreRows", moreRows)
@@ -292,7 +292,7 @@ func (r *rows) Next(dest []driver.Value) error {
 				var n C.uint32_t
 				var data *C.dpiData
 				if C.dpiVar_getReturnedData(r.vars[i], 0, &n, &data) == C.DPI_FAILURE {
-					return errors.Wrapf(r.getError(), "getReturnedData[%d]", i)
+					return r.getError()
 				}
 				r.data[i] = (*[maxArraySize]C.dpiData)(unsafe.Pointer(data))[:n:n]
 				//fmt.Printf("data %d=%+v\n%+v\n", n, data, r.data[i][0])
@@ -462,7 +462,7 @@ func (r *rows) Next(dest []driver.Value) error {
 			}
 			var colCount C.uint32_t
 			if C.dpiStmt_getNumQueryColumns(st.dpiStmt, &colCount) == C.DPI_FAILURE {
-				return errors.Wrap(r.getError(), "getNumQueryColumns")
+				return r.getError()
 			}
 			st.Lock()
 			r2, err := st.openRows(int(colCount))

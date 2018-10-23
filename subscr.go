@@ -169,7 +169,7 @@ func (c *conn) NewSubscription(name string, cb func(Event)) (*Subscription, erro
 	) == C.DPI_FAILURE {
 		C.free(unsafe.Pointer(params))
 		C.free(unsafe.Pointer(dpiSubscr))
-		err := errors.Wrap(c.getError(), "newSubscription")
+		err := c.getError()
 		if strings.Contains(errors.Cause(err).Error(), "DPI-1065:") {
 			err = errors.WithMessage(err, "specify \"enableEvents=1\" connection parameter on connection to be able to use subscriptions")
 		}
@@ -186,18 +186,18 @@ func (s *Subscription) Register(qry string, params ...interface{}) error {
 
 	var dpiStmt *C.dpiStmt
 	if C.dpiSubscr_prepareStmt(s.dpiSubscr, cQry, C.uint32_t(len(qry)), &dpiStmt) == C.DPI_FAILURE {
-		return errors.Wrapf(s.getError(), "prepareStmt[%p]", s.dpiSubscr)
+		return s.getError()
 	}
 	defer func() { C.dpiStmt_release(dpiStmt) }()
 
 	mode := C.dpiExecMode(C.DPI_MODE_EXEC_DEFAULT)
 	var qCols C.uint32_t
 	if C.dpiStmt_execute(dpiStmt, mode, &qCols) == C.DPI_FAILURE {
-		return errors.Wrap(s.getError(), "executeStmt")
+		return s.getError()
 	}
 	var queryID C.uint64_t
 	if C.dpiStmt_getSubscrQueryId(dpiStmt, &queryID) == C.DPI_FAILURE {
-		return errors.Wrap(s.getError(), "getSubscrQueryId")
+		return s.getError()
 	}
 	if Log != nil {
 		Log("msg", "subscribed", "query", qry, "id", queryID)
@@ -217,7 +217,7 @@ func (s *Subscription) Close() error {
 		return nil
 	}
 	if C.dpiConn_unsubscribe(conn.dpiConn, dpiSubscr) == C.DPI_FAILURE {
-		return errors.Wrap(s.getError(), "close")
+		return s.getError()
 	}
 	return nil
 }

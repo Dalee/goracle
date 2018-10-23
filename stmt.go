@@ -197,7 +197,7 @@ func (st *statement) close() error {
 	if c == nil {
 		return driver.ErrBadConn
 	}
-	return errors.Wrap(c.getError(), "statement/dpiStmt_release")
+	return c.getError()
 }
 
 func (st *statement) cleanup() error {
@@ -221,7 +221,7 @@ func (st *statement) cleanup() error {
 	if c == nil {
 		return driver.ErrBadConn
 	}
-	return errors.Wrap(c.getError(), "statement/dpiStmt_release")
+	return c.getError()
 }
 
 // Exec executes a query that doesn't return rows, such
@@ -327,7 +327,7 @@ func (st *statement) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			if err == nil {
 				var info C.dpiStmtInfo
 				if C.dpiStmt_getInfo(st.dpiStmt, &info) == C.DPI_FAILURE {
-					err = errors.Wrap(st.getError(), "getInfo")
+					err = st.getError()
 				}
 				st.isReturning = info.isReturning != 0
 				return
@@ -348,7 +348,7 @@ func (st *statement) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			}
 			break
 		}
-		done <- maybeBadConn(errors.Wrapf(err, "dpiStmt_execute(mode=%d arrLen=%d)", mode, st.arrLen))
+		done <- maybeBadConn(err)
 	}()
 
 	select {
@@ -385,7 +385,7 @@ func (st *statement) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			data := &st.data[i][0]
 			if C.dpiVar_getReturnedData(st.vars[i], 0, &n, &data) == C.DPI_FAILURE {
 				err = st.getError()
-				return nil, errors.Wrapf(closeIfBadConn(err), "%d.getReturnedData", i)
+				return nil, closeIfBadConn(err)
 			}
 			if n == 0 {
 				st.data[i] = st.data[i][:0]
@@ -399,7 +399,7 @@ func (st *statement) ExecContext(ctx context.Context, args []driver.NamedValue) 
 				if Log != nil {
 					Log("get", i, "error", err)
 				}
-				return nil, errors.Wrapf(closeIfBadConn(err), "%d. get[%d]", i, 0)
+				return nil, closeIfBadConn(err)
 			}
 			continue
 		}
@@ -409,14 +409,14 @@ func (st *statement) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			if Log != nil {
 				Log("msg", "getNumElementsInArray", "i", i, "error", err)
 			}
-			return nil, errors.Wrapf(closeIfBadConn(err), "%d.getNumElementsInArray", i)
+			return nil, closeIfBadConn(err)
 		}
 		//fmt.Printf("i=%d dest=%T %#v\n", i, dest, dest)
 		if err = get(dest, st.data[i][:n]); err != nil {
 			if Log != nil {
 				Log("msg", "get", "i", i, "n", n, "error", err)
 			}
-			return nil, errors.Wrapf(closeIfBadConn(err), "%d. get", i)
+			return nil, closeIfBadConn(err)
 		}
 	}
 	var count C.uint64_t
@@ -490,7 +490,7 @@ func (st *statement) QueryContext(ctx context.Context, args []driver.NamedValue)
 				}
 			}
 		}
-		done <- maybeBadConn(errors.Wrap(err, "dpiStmt_execute"))
+		done <- maybeBadConn(err)
 	}()
 
 	select {
@@ -708,7 +708,7 @@ func (st *statement) bindVars(args []driver.NamedValue, Log logFunc) error {
 
 		var err error
 		if value, err = st.bindVarTypeSwitch(info, &(st.gets[i]), value); err != nil {
-			return errors.Wrapf(err, "%d. arg", i+1)
+			return err
 		}
 
 		var rv reflect.Value
@@ -755,7 +755,7 @@ func (st *statement) bindVars(args []driver.NamedValue, Log logFunc) error {
 					Log("C", "dpiVar_setNumElementsInArray", "i", i, "n", 0)
 				}
 				if C.dpiVar_setNumElementsInArray(dv, C.uint32_t(0)) == C.DPI_FAILURE {
-					return errors.Wrapf(st.getError(), "setNumElementsInArray[%d](%d)", i, 0)
+					return st.getError()
 				}
 			}
 			continue
@@ -766,7 +766,7 @@ func (st *statement) bindVars(args []driver.NamedValue, Log logFunc) error {
 				Log("msg", "set", "i", i, "value", fmt.Sprintf("%T=%#v", value, value))
 			}
 			if err := info.set(dv, data[:1], value); err != nil {
-				return errors.Wrapf(err, "set(data[%d][%d], %#v (%T))", i, 0, value, value)
+				return err
 			}
 			continue
 		}
@@ -778,7 +778,7 @@ func (st *statement) bindVars(args []driver.NamedValue, Log logFunc) error {
 				Log("C", "dpiVar_setNumElementsInArray", "i", i, "n", n)
 			}
 			if C.dpiVar_setNumElementsInArray(dv, C.uint32_t(n)) == C.DPI_FAILURE {
-				return errors.Wrapf(st.getError(), "%+v.setNumElementsInArray[%d](%d)", dv, i, n)
+				return st.getError()
 			}
 		}
 		//fmt.Println("n:", len(st.data[i]))
@@ -791,7 +791,7 @@ func (st *statement) bindVars(args []driver.NamedValue, Log logFunc) error {
 		for i, v := range st.vars {
 			//if Log != nil {Log("C", "dpiStmt_bindByPos", "dpiStmt", st.dpiStmt, "i", i, "v", v) }
 			if C.dpiStmt_bindByPos(st.dpiStmt, C.uint32_t(i+1), v) == C.DPI_FAILURE {
-				return errors.Wrapf(st.getError(), "bindByPos[%d]", i)
+				return st.getError()
 			}
 		}
 		return nil
@@ -806,7 +806,7 @@ func (st *statement) bindVars(args []driver.NamedValue, Log logFunc) error {
 		res := C.dpiStmt_bindByName(st.dpiStmt, cName, C.uint32_t(len(name)), st.vars[i])
 		C.free(unsafe.Pointer(cName))
 		if res == C.DPI_FAILURE {
-			return errors.Wrapf(st.getError(), "bindByName[%q]", name)
+			return st.getError()
 		}
 	}
 	return nil
@@ -830,7 +830,7 @@ func (st *statement) bindVarTypeSwitch(info *argInfo, get *dataGetter, value int
 				if isValuer {
 					var err error
 					if value, err = vlr.Value(); err != nil {
-						return value, errors.Wrap(err, "arg.Value()")
+						return value, err
 					}
 					return st.bindVarTypeSwitch(info, get, value)
 				}
@@ -1081,7 +1081,7 @@ func (st *statement) bindVarTypeSwitch(info *argInfo, get *dataGetter, value int
 		}
 		var err error
 		if value, err = vlr.Value(); err != nil {
-			return value, errors.Wrap(err, "arg.Value()")
+			return value, err
 		}
 		return st.bindVarTypeSwitch(info, get, value)
 	}
@@ -1683,7 +1683,7 @@ func (c *conn) dataGetStmtC(row *driver.Rows, data *C.dpiData) error {
 	var n C.uint32_t
 	if C.dpiStmt_getNumQueryColumns(st.dpiStmt, &n) == C.DPI_FAILURE {
 		*row = &rows{
-			err: errors.Wrapf(io.EOF, "getNumQueryColumns: %v", c.getError()),
+			err: io.EOF,
 		}
 		return nil
 	}
@@ -1752,7 +1752,7 @@ func (c *conn) dataSetLOB(dv *C.dpiVar, data []C.dpiData, vv interface{}) error 
 		}
 		var lob *C.dpiLob
 		if C.dpiConn_newTempLob(c.dpiConn, typ, &lob) == C.DPI_FAILURE {
-			return errors.Wrapf(c.getError(), "newTempLob(typ=%d)", typ)
+			return c.getError()
 		}
 		var chunkSize C.uint32_t
 		_ = C.dpiLob_getChunkSize(lob, &chunkSize)
@@ -1869,7 +1869,7 @@ func (st *statement) openRows(colCount int) (*rows, error) {
 	var ti C.dpiDataTypeInfo
 	for i := 0; i < colCount; i++ {
 		if C.dpiStmt_getQueryInfo(st.dpiStmt, C.uint32_t(i+1), &info) == C.DPI_FAILURE {
-			return nil, errors.Wrapf(st.getError(), "getQueryInfo[%d]", i)
+			return nil, st.getError()
 		}
 		ti = info.typeInfo
 		bufSize := int(ti.clientSizeInBytes)
@@ -1922,11 +1922,11 @@ func (st *statement) openRows(colCount int) (*rows, error) {
 		}
 
 		if C.dpiStmt_define(st.dpiStmt, C.uint32_t(i+1), r.vars[i]) == C.DPI_FAILURE {
-			return nil, errors.Wrapf(st.getError(), "define[%d]", i)
+			return nil, st.getError()
 		}
 	}
 	if C.dpiStmt_addRef(st.dpiStmt) == C.DPI_FAILURE {
-		return &r, errors.Wrap(st.getError(), "dpiStmt_addRef")
+		return &r, st.getError()
 	}
 	st.columns = r.columns
 	return &r, nil

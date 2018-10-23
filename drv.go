@@ -342,7 +342,7 @@ func (d *drv) init() error {
 
 	var v C.dpiVersionInfo
 	if C.dpiContext_getClientVersion(d.dpiContext, &v) == C.DPI_FAILURE {
-		return errors.Wrap(d.getError(), "getClientVersion")
+		return d.getError()
 	}
 	d.clientVersion.set(&v)
 	return nil
@@ -392,7 +392,7 @@ func (d *drv) openConn(P ConnectionParams) (*conn, error) {
 	extAuth := C.int(b2i(P.Username == "" && P.Password == ""))
 	var connCreateParams C.dpiConnCreateParams
 	if C.dpiContext_initConnCreateParams(d.dpiContext, &connCreateParams) == C.DPI_FAILURE {
-		return nil, errors.Wrap(d.getError(), "initConnCreateParams")
+		return nil, d.getError()
 	}
 	connCreateParams.authMode = authMode
 	connCreateParams.externalAuth = extAuth
@@ -417,7 +417,7 @@ func (d *drv) openConn(P ConnectionParams) (*conn, error) {
 				(**C.dpiConn)(unsafe.Pointer(&dc)),
 			) == C.DPI_FAILURE {
 				C.free(unsafe.Pointer(dc))
-				return nil, errors.Wrapf(d.getError(), "acquireConnection[%s]", P)
+				return nil, d.getError()
 			}
 			c.dpiConn = (*C.dpiConn)(dc)
 			return &c, c.init()
@@ -443,7 +443,7 @@ func (d *drv) openConn(P ConnectionParams) (*conn, error) {
 	}()
 	var commonCreateParams C.dpiCommonCreateParams
 	if C.dpiContext_initCommonCreateParams(d.dpiContext, &commonCreateParams) == C.DPI_FAILURE {
-		return nil, errors.Wrap(d.getError(), "initCommonCreateParams")
+		return nil, d.getError()
 	}
 	commonCreateParams.createMode = C.DPI_MODE_CREATE_DEFAULT | C.DPI_MODE_CREATE_THREADED
 	if P.EnableEvents {
@@ -469,14 +469,14 @@ func (d *drv) openConn(P ConnectionParams) (*conn, error) {
 			(**C.dpiConn)(unsafe.Pointer(&dc)),
 		) == C.DPI_FAILURE {
 			C.free(unsafe.Pointer(dc))
-			return nil, errors.Wrapf(d.getError(), "username=%q sid=%q params=%+v", P.Username, P.SID, connCreateParams)
+			return nil, d.getError()
 		}
 		c.dpiConn = (*C.dpiConn)(dc)
 		return &c, c.init()
 	}
 	var poolCreateParams C.dpiPoolCreateParams
 	if C.dpiContext_initPoolCreateParams(d.dpiContext, &poolCreateParams) == C.DPI_FAILURE {
-		return nil, errors.Wrap(d.getError(), "initPoolCreateParams")
+		return nil, d.getError()
 	}
 	poolCreateParams.minSessions = C.uint32_t(P.MinSessions)
 	poolCreateParams.maxSessions = C.uint32_t(P.MaxSessions)
@@ -504,9 +504,7 @@ func (d *drv) openConn(P ConnectionParams) (*conn, error) {
 		&poolCreateParams,
 		(**C.dpiPool)(unsafe.Pointer(&dp)),
 	) == C.DPI_FAILURE {
-		return nil, errors.Wrapf(d.getError(), "username=%q SID=%q minSessions=%d maxSessions=%d poolIncrement=%d extAuth=%d ",
-			P.Username, P.SID,
-			P.MinSessions, P.MaxSessions, P.PoolIncrement, extAuth)
+		return nil, d.getError()
 	}
 	C.dpiPool_setStmtCacheSize(dp, 40)
 	d.mu.Lock()
@@ -614,7 +612,7 @@ func ParseConnString(connString string) (ConnectionParams, error) {
 	}
 	u, err := url.Parse(connString)
 	if err != nil {
-		return P, errors.Wrap(err, connString)
+		return P, err
 	}
 	if usr := u.User; usr != nil {
 		P.Username = usr.Username()
@@ -654,7 +652,7 @@ func ParseConnString(connString string) (ConnectionParams, error) {
 		var err error
 		*task.Dest, err = strconv.Atoi(s)
 		if err != nil {
-			return P, errors.Wrap(err, task.Key+"="+s)
+			return P, err
 		}
 	}
 	if P.MinSessions > P.MaxSessions {

@@ -23,8 +23,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 // QueryColumn is the described column.
@@ -212,7 +210,7 @@ func MapToSlice(qry string, metParam func(string) interface{}) (string, []interf
 func EnableDbmsOutput(ctx context.Context, conn Execer) error {
 	qry := "BEGIN DBMS_OUTPUT.enable(1000000); END;"
 	_, err := conn.ExecContext(ctx, qry)
-	return errors.Wrap(err, qry)
+	return err
 }
 
 // ReadDbmsOutput copies the DBMS_OUTPUT buffer into the given io.Writer.
@@ -220,7 +218,7 @@ func ReadDbmsOutput(ctx context.Context, w io.Writer, conn preparer) error {
 	qry := `BEGIN DBMS_OUTPUT.get_lines(:1, :2); END;`
 	stmt, err := conn.PrepareContext(ctx, qry)
 	if err != nil {
-		return errors.Wrap(err, qry)
+		return err
 	}
 
 	lines := make([]string, 128)
@@ -231,7 +229,7 @@ func ReadDbmsOutput(ctx context.Context, w io.Writer, conn preparer) error {
 	for {
 		numLines = int64(len(lines))
 		if _, err := stmt.ExecContext(ctx, params...); err != nil {
-			return errors.Wrap(err, qry)
+			return err
 		}
 		for i := 0; i < int(numLines); i++ {
 			if _, err := io.WriteString(w, lines[i]); err != nil {
@@ -291,7 +289,7 @@ func getConn(ex Execer) (*conn, error) {
 	defer getConnMu.Unlock()
 	var c interface{}
 	if _, err := ex.ExecContext(context.Background(), getConnection, sql.Out{Dest: &c}); err != nil {
-		return nil, errors.Wrap(err, "getConnection")
+		return nil, err
 	}
 	return c.(*conn), nil
 }

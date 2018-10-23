@@ -70,7 +70,7 @@ func (c *conn) Break() error {
 		Log("msg", "Break", "dpiConn", c.dpiConn)
 	}
 	if C.dpiConn_breakExecution(c.dpiConn) == C.DPI_FAILURE {
-		return errors.Wrap(c.getError(), "Break")
+		return c.getError()
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func (c *conn) Ping(ctx context.Context) error {
 		defer close(done)
 		failure := C.dpiConn_ping(c.dpiConn) == C.DPI_FAILURE
 		if failure {
-			done <- maybeBadConn(errors.Wrap(c.getError(), "Ping"))
+			done <- maybeBadConn(c.getError())
 			return
 		}
 		done <- nil
@@ -151,7 +151,7 @@ func (c *conn) Close() error {
 	close(done)
 	var err error
 	if rc == C.DPI_FAILURE {
-		err = errors.Wrap(c.getError(), "Close")
+		err = c.getError()
 	}
 	return err
 }
@@ -205,7 +205,7 @@ func (c *conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, e
 			stmt.Close()
 		}
 		if err != nil {
-			return nil, errors.Wrap(err, qry)
+			return nil, err
 		}
 	}
 
@@ -255,7 +255,7 @@ func (c *conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 	if C.dpiConn_prepareStmt(c.dpiConn, 0, cSQL, C.uint32_t(len(query)), nil, 0,
 		(**C.dpiStmt)(unsafe.Pointer(&dpiStmt)),
 	) == C.DPI_FAILURE {
-		return nil, maybeBadConn(errors.Wrap(c.getError(), "Prepare: "+query))
+		return nil, maybeBadConn(c.getError())
 	}
 	return &statement{conn: c, dpiStmt: dpiStmt, query: query}, nil
 }
@@ -273,12 +273,12 @@ func (c *conn) endTran(isCommit bool) error {
 	//msg := "Commit"
 	if isCommit {
 		if C.dpiConn_commit(c.dpiConn) == C.DPI_FAILURE {
-			err = errors.Wrap(c.getError(), "Commit")
+			err = c.getError()
 		}
 	} else {
 		//msg = "Rollback"
 		if C.dpiConn_rollback(c.dpiConn) == C.DPI_FAILURE {
-			err = errors.Wrap(c.getError(), "Rollback")
+			err = c.getError()
 		}
 	}
 	c.Unlock()
@@ -316,7 +316,7 @@ func (c *conn) newVar(vi varInfo) (*C.dpiVar, []C.dpiData, error) {
 		isArray, vi.ObjectType,
 		&v, &dataArr,
 	) == C.DPI_FAILURE {
-		return nil, nil, errors.Wrapf(c.getError(), "newVar(typ=%d, natTyp=%d, sliceLen=%d, bufSize=%d)", vi.Typ, vi.NatTyp, vi.SliceLen, vi.BufSize)
+		return nil, nil, c.getError()
 	}
 	// https://github.com/golang/go/wiki/cgo#Turning_C_arrays_into_Go_slices
 	/*
@@ -346,7 +346,7 @@ func (c *conn) init() error {
 	var release *C.char
 	var releaseLen C.uint32_t
 	if C.dpiConn_getServerVersion(c.dpiConn, &release, &releaseLen, &v) == C.DPI_FAILURE {
-		return errors.Wrap(c.getError(), "getServerVersion")
+		return c.getError()
 	}
 	c.Server.set(&v)
 	c.Server.ServerRelease = C.GoStringN(release, C.int(releaseLen))
@@ -451,7 +451,7 @@ func (c *conn) setTraceTag(tt TraceTag) error {
 			rc = C.dpiConn_setDbOp(c.dpiConn, s, C.uint32_t(len(*v)))
 		}
 		if rc == C.DPI_FAILURE && err == nil {
-			err = errors.Wrap(c.getError(), nm)
+			err = c.getError()
 		}
 		if s != nil {
 			C.free(unsafe.Pointer(s))
